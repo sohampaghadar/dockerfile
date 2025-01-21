@@ -1,30 +1,22 @@
-name: Build and Push Docker Image
+# Learn about building .NET container images:
+# https://github.com/dotnet/dotnet-docker/blob/main/samples/README.md
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+ARG TARGETARCH
+WORKDIR /source
 
-on:
-  push:
-    branches:
-      - main
+# Copy project file and restore as distinct layers
+COPY --link aspnetapp/*.csproj .
+RUN dotnet restore -a $TARGETARCH
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
+# Copy source code and publish app
+COPY --link aspnetapp/. .
+RUN dotnet publish -a $TARGETARCH --no-restore -o /app
 
-      - name: Set up .NET
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: 6.0 # Replace with your .NET version
 
-      - name: Build and Publish .NET App
-        run: |
-          dotnet publish -c Release -o output
-
-      - name: Build Docker Image
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          file: Dockerfile
-          push: false # Change to true if you want to push to a registry
-          tags: myapp:latest
+# Runtime stage
+FROM mcr.microsoft.com/dotnet/aspnet:9.0
+EXPOSE 8080
+WORKDIR /app
+COPY --link --from=build /app .
+USER $APP_UID
+ENTRYPOINT ["./aspnetapp"]
